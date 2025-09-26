@@ -1,7 +1,9 @@
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -44,6 +46,25 @@ private:
   vk::raii::Context context;
   vk::raii::Instance instance = NULL;
   vk::raii::DebugUtilsMessengerEXT debugMessenger = NULL;
+  vk::raii::PhysicalDevice physicalDevice = NULL;
+  std::vector<const char *> requiredDeviceExtension = {
+      vk::KHRSwapchainExtensionName, vk::KHRSpirv14ExtensionName,
+      vk::KHRSynchronization2ExtensionName,
+      vk::KHRCreateRenderpass2ExtensionName};
+
+  static std::string
+  stringifySeverityFlag(vk::DebugUtilsMessageSeverityFlagBitsEXT severity) {
+    switch (severity) {
+    case vk::DebugUtilsMessageSeverityFlagBitsEXT::eError:
+      return "[ERROR]";
+    case vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo:
+      return "[INFO]";
+    case vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose:
+      return "[VERBOSE]";
+    case vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning:
+      return "[WARNING]";
+    }
+  }
 
   void setupDebugMessenger() {
     if (!enableValidationLayers) {
@@ -70,8 +91,9 @@ private:
       vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
       vk::DebugUtilsMessageTypeFlagsEXT type,
       const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData, void *) {
-    std::cerr << "validation layer: type " << to_string(type)
-              << " msg: " << pCallbackData->pMessage << std::endl;
+    std::cerr << stringifySeverityFlag(severity) << " validation layer: type "
+              << to_string(type) << " msg: " << pCallbackData->pMessage
+              << std::endl;
 
     return vk::False;
   }
@@ -149,6 +171,55 @@ private:
       std::cout << "Validations OFF" << std::endl;
     }
   }
+
+  void pickPhysicalDevice() {
+    auto devices = instance.enumeratePhysicalDevices();
+
+    if (devices.empty()) {
+      throw std::runtime_error("No GPUs implementing Vulkan APIs found.");
+    } else {
+      std::cout << "Found " << devices.size() << " GPUs supporting Vulkan: ";
+      for (const auto &dev : devices) {
+        std::cout << dev.getProperties().deviceName;
+        std::cout << ", ";
+      }
+      std::cout << std::endl;
+    }
+
+    for (auto const &device : devices) {
+      auto queueFamilies = device.getQueueFamilyProperties();
+      bool isSuitable = device.getProperties().apiVersion >= VK_API_VERSION_1_3;
+      // std::cout << "isSuitable: " << isSuitable << std::endl; // good
+      auto qfpIter = std::ranges::find_if(
+          queueFamilies, [](vk::QueueFamilyProperties const &qfp) {
+            return (qfp.queueFlags & vk::QueueFlagBits::eGraphics) !=
+                   static_cast<vk::QueueFlags>(0);
+          });
+      isSuitable = isSuitable && (qfpIter != queueFamilies.end());
+      // std::cout << "isSuitable: " << isSuitable << std::endl; // good
+      auto extensions = device.enumerateDeviceExtensionProperties();
+      bool found = true;
+      for (const auto &reqDevExt : requiredDeviceExtension) {
+        auto extImplemented =
+            std::ranges::any_of(extensions, [reqDevExt](const auto &extension) {
+              return strcmp(reqDevExt, extension.extensionName) == 0;
+            });
+        found = found && extImplemented;
+      }
+      isSuitable = isSuitable && found;
+      if (isSuitable) {
+        std::cout << "Found a suitable device!"
+                  << device.getProperties().deviceName << std::endl;
+        physicalDevice = std::move(device);
+        return;
+      } else {
+        std::cout << "Did NOT find a suitable device!" << std::endl;
+      }
+    }
+    throw std::runtime_error("Didn't find any Vulkan devices which implement "
+                             "required extensions :/\n");
+  }
+
   void initWindow() {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -156,10 +227,32 @@ private:
     window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Vulkan Triangle",
                               NULL, NULL);
   }
+
   void initVulkan() {
     createInstance();
     setupDebugMessenger();
+    pickPhysicalDevice();
+    std::cout << physicalDevice.getProperties().deviceName << std::endl;
+    vk::QueueFamilyProperties pr;
+    vk::QueueFlags qf;
+    for (const auto &queuFam : physicalDevice.getQueueFamilyProperties()) {
+      std::cout << "familiy has: " << queuFam.queueCount << "queus, ";
+      if (queuFam.queueFlags & vk::QueueFlagBits::eCompute)
+        std::cout << "flags: " << "COMPUTE ";
+      if (queuFam.queueFlags & vk::QueueFlagBits::eGraphics)
+        std::cout << "flags: " << "GRAPHICS ";
+      if (queuFam.queueFlags & vk::QueueFlagBits::eTransfer)
+        std::cout << "flags: " << "MEMORY TRANSFER ";
+      if (queuFam.queueFlags & vk::QueueFlagBits::eVideoDecodeKHR)
+        std::cout << "flags: " << "VIDEO DECODE ";
+      if (queuFam.queueFlags & vk::QueueFlagBits::eVideoEncodeKHR)
+        std::cout << "flags: " << "VIDEO ENCODE ";
+      std::cout << std::endl;
+    }
+    std::cout << "Number of Queue families: "
+              << physicalDevice.getQueueFamilyProperties().size() << std::endl;
   }
+
   void mainLoop() {
     while (!(glfwWindowShouldClose(window))) {
       glfwWaitEvents();
@@ -169,6 +262,7 @@ private:
       //  glfwCreateWindowSurface
     }
   }
+
   void cleanup() {
     glfwDestroyWindow(window);
     glfwTerminate();

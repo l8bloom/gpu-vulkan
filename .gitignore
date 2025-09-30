@@ -31,3 +31,5 @@ venv/
 .\#*
 
 .cache/
+*.spv
+*.slang-ast

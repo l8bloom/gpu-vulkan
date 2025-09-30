@@ -9,6 +9,32 @@ find_package(glfw3 REQUIRED)
 add_executable(vulkos main.cpp)
 target_link_libraries(vulkos PRIVATE Vulkan::Vulkan glfw)
 
+function (add_slang_shader_target TARGET)
+  cmake_parse_arguments ("SHADER" "" "" "SOURCES" ${ARGN})
+  set(SHADERS_DIR ${CMAKE_CURRENT_LIST_DIR}/shaders)
+  set(ENTRY_POINTS -entry vertMain -entry fragMain)
+  message("hello")
+
+  add_custom_command(
+    OUTPUT ${SHADERS_DIR}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADERS_DIR}
+  )
+  add_custom_command(
+    OUTPUT ${SHADERS_DIR}/slang.spv
+    COMMAND slangc ${SHADER_SOURCES} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o slang.spv
+    WORKING_DIRECTORY ${SHADERS_DIR}
+    # this works only b/c there's one source, needs to be revisited otherwise
+    DEPENDS ${SHADERS_DIR} ${SHADERS_DIR}/${SHADER_SOURCES}
+    COMMENT "Compiling Slang Shaders"
+    VERBATIM
+  )
+  add_custom_target(${TARGET} DEPENDS ${SHADERS_DIR}/slang.spv)
+endfunction()
+
+add_slang_shader_target(compile_shaders SOURCES ${SHADER_SLANG_SOURCES})
+add_dependencies(vulkos compile_shaders)
+
+
 # debug: probe possible names and print properties
 # foreach(t Vulkan::Vulkan Vulkan VulkanLoader VulkanLoader::VulkanLoader)
 #   if(TARGET ${t})

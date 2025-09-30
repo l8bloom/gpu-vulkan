@@ -16,6 +16,7 @@ cmake \
     -D CMAKE_C_COMPILER=clang \
     -D CMAKE_CXX_COMPILER=clang++ \
     -D CMAKE_PREFIX_PATH="$HOME/.local;$HOME/Downloads/vulkanSDK/1.4.321.1/x86_64" \
+    -D SHADER_SLANG_SOURCES="shader.slang" \
     -G Ninja
 
 ninja -C build

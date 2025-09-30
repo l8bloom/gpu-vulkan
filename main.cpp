@@ -2,19 +2,24 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
-#include <iterator>
+#include <fstream>
+#include <ios>
+#include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
-#define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 
-#include "vulkan/vulkan.hpp"
-#include "vulkan/vulkan_core.h"
-#include "vulkan/vulkan_enums.hpp"
-#include <cstdlib>
-#include <iostream>
+#define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
+#include <vulkan/vulkan.hpp>
+// mostly for clangd autocompletions
+#include "vulkan/vulkan_to_string.hpp"
+#include <vulkan/vulkan_core.h>
+#include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_raii.hpp>
+#include <vulkan/vulkan_structs.hpp>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -48,9 +53,21 @@ private:
   vk::raii::DebugUtilsMessengerEXT debugMessenger = NULL;
   vk::raii::PhysicalDevice physicalDevice = NULL;
   std::vector<const char *> requiredDeviceExtension = {
-      vk::KHRSwapchainExtensionName, vk::KHRSpirv14ExtensionName,
+      vk::KHRSwapchainExtensionName,
+      vk::KHRSpirv14ExtensionName,
       vk::KHRSynchronization2ExtensionName,
-      vk::KHRCreateRenderpass2ExtensionName};
+      vk::KHRCreateRenderpass2ExtensionName,
+      vk::KHRShaderDrawParametersExtensionName,
+  };
+  vk::raii::Device device = NULL;
+  vk::raii::Queue graphicsQueue = NULL;
+  vk::raii::Queue presentQueue = NULL;
+  vk::raii::SurfaceKHR surface = NULL;
+  vk::raii::SwapchainKHR swapChain = VK_NULL_HANDLE;
+  std::vector<vk::Image> swapChainImages;
+  vk::Format swapChainImageFormat = vk::Format::eUndefined;
+  vk::Extent2D swapChainExtent;
+  std::vector<vk::raii::ImageView> swapChainImageViews;
 
   static std::string
   stringifySeverityFlag(vk::DebugUtilsMessageSeverityFlagBitsEXT severity) {
@@ -66,10 +83,23 @@ private:
     }
   }
 
-  void setupDebugMessenger() {
-    if (!enableValidationLayers) {
-      return;
+  static std::vector<char> readFile(const std::string &fileName) {
+    std::ifstream file(fileName, std::ios::ate | std::ios::binary);
+
+    if (!file.is_open()) {
+      throw std::runtime_error(std::format("Couldn't open the file", fileName));
     }
+    std::vector<char> buffer(file.tellg());
+    file.seekg(0, std::ios::beg);
+    file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+    file.close();
+    return buffer;
+  }
+
+  void setupDebugMessenger() {
+    if (!enableValidationLayers)
+      return;
+
     vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(
         vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
         vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
@@ -220,6 +250,259 @@ private:
                              "required extensions :/\n");
   }
 
+  vk::Extent2D
+  _chooseSwapExtent(const vk::SurfaceCapabilitiesKHR &surfaceCapabilities) {
+    int imageExtentHeight, imageExtentWidth;
+
+    if (surfaceCapabilities.currentExtent.width !=
+        std::numeric_limits<uint32_t>::max())
+      return surfaceCapabilities.currentExtent;
+
+    glfwGetFramebufferSize(window, &imageExtentWidth, &imageExtentHeight);
+    std::cout << "Final image width: " << imageExtentWidth
+              << ", final image height: " << imageExtentHeight << std::endl;
+
+    return {std::clamp<uint32_t>(imageExtentHeight,
+                                 surfaceCapabilities.minImageExtent.height,
+                                 surfaceCapabilities.maxImageExtent.height),
+            std::clamp<uint32_t>(imageExtentWidth,
+                                 surfaceCapabilities.minImageExtent.width,
+                                 surfaceCapabilities.maxImageExtent.width)};
+  }
+
+  vk::SurfaceFormatKHR _chooseSurfaceFormat(
+      const std::vector<vk::SurfaceFormatKHR> &availableFormats) {
+    for (auto format : availableFormats) {
+      std::cout << vk::to_string(format.format) << " "
+                << vk::to_string(format.colorSpace) << std::endl;
+    }
+
+    vk::SurfaceFormatKHR chosenFormat = availableFormats[0];
+    for (auto &format : availableFormats) {
+      if ((format.format == vk::Format::eB8G8R8A8Srgb) &&
+          (format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)) {
+        chosenFormat = format;
+        break;
+      }
+    }
+
+    std::cout << "Chosen format: " << vk::to_string(chosenFormat.format)
+              << ", chosen color space: "
+              << vk::to_string(chosenFormat.colorSpace) << std::endl;
+
+    return chosenFormat;
+  }
+
+  vk::PresentModeKHR _choosePresentMode(
+      const std::vector<vk::PresentModeKHR> &availablePresentModes) {
+
+    std::cout << "Available present modes count: "
+              << availablePresentModes.size() << std::endl;
+
+    for (auto presentMode : availablePresentModes) {
+      if (presentMode == vk::PresentModeKHR::eFifo)
+        std::cout << "Fifo supported" << std::endl;
+      if (presentMode == vk::PresentModeKHR::eFifoLatestReady)
+        std::cout << "Fifo Latest Ready supported" << std::endl;
+
+      if (presentMode == vk::PresentModeKHR::eFifoRelaxed)
+        std::cout << "Fifo Relaxed supported" << std::endl;
+
+      if (presentMode == vk::PresentModeKHR::eImmediate)
+        std::cout << "Immediate supported" << std::endl;
+
+      if (presentMode == vk::PresentModeKHR::eMailbox)
+        std::cout << "Emailbox supported" << std::endl;
+
+      if (presentMode == vk::PresentModeKHR::eSharedContinuousRefresh)
+        std::cout << "Shared supported" << std::endl;
+
+      if (presentMode == vk::PresentModeKHR::eSharedDemandRefresh)
+        std::cout << "Shared Demand supported" << std::endl;
+    }
+
+    vk::PresentModeKHR chosenPresentMode = vk::PresentModeKHR::eFifo;
+    for (auto &presentMode : availablePresentModes) {
+      if (presentMode == vk::PresentModeKHR::eMailbox) {
+        chosenPresentMode = presentMode;
+        break;
+      }
+    }
+
+    std::cout << "Chosen present mode is "
+              << (chosenPresentMode == vk::PresentModeKHR::eMailbox
+                      ? "Mailbox(tripple buffering) mode"
+                      : "Fifo mode")
+              << std::endl;
+    return chosenPresentMode;
+  }
+
+  void createSwapChain() {
+    auto surfaceCapabilities =
+        physicalDevice.getSurfaceCapabilitiesKHR(surface);
+
+    swapChainExtent = _chooseSwapExtent(surfaceCapabilities);
+    auto swapChainSurfaceFormat =
+        _chooseSurfaceFormat(physicalDevice.getSurfaceFormatsKHR(surface));
+    swapChainImageFormat = swapChainSurfaceFormat.format;
+    auto minImageCount = std::max(3u, surfaceCapabilities.minImageCount);
+    minImageCount = (surfaceCapabilities.maxImageCount > 0 &&
+                     minImageCount > surfaceCapabilities.maxImageCount)
+                        ? surfaceCapabilities.maxImageCount
+                        : minImageCount;
+
+    vk::SwapchainCreateInfoKHR swapChainCreateInfo{
+        .flags = vk::SwapchainCreateFlagsKHR(),
+        .surface = surface,
+        .minImageCount = minImageCount,
+        .imageFormat = swapChainSurfaceFormat.format,
+        .imageColorSpace = swapChainSurfaceFormat.colorSpace,
+        .imageExtent = swapChainExtent,
+        .imageArrayLayers = 1,
+        .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+        .imageSharingMode = vk::SharingMode::eExclusive,
+        .preTransform = surfaceCapabilities.currentTransform,
+        .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
+        .presentMode = _choosePresentMode(
+            physicalDevice.getSurfacePresentModesKHR(surface)),
+        .clipped = vk::True,
+        .oldSwapchain = VK_NULL_HANDLE,
+    };
+    // NOTE:
+    // in tutorial they have checked if the graphics and present queues are
+    // different, if so swap chain create info needs to be aware of it and of
+    // the ownership. The tutorial does say that most of the time on most of the
+    // hardware the two queues will be under the same family, I will just
+    // hardcode the known family
+    swapChainCreateInfo.queueFamilyIndexCount = 0;
+    swapChainCreateInfo.pQueueFamilyIndices = 0;
+    swapChain = vk::raii::SwapchainKHR(device, swapChainCreateInfo);
+    swapChainImages = swapChain.getImages();
+    std::cout << "Number of swap chain images: " << swapChainImages.size()
+              << std::endl;
+  }
+
+  void createLogicalDevice() {
+    uint32_t graphicsFamilyIndex = -1, counter = 0;
+    for (const auto &queuFam : physicalDevice.getQueueFamilyProperties()) {
+      std::cout << "familiy has: " << queuFam.queueCount << "queus, ";
+      if (queuFam.queueFlags & vk::QueueFlagBits::eCompute)
+        std::cout << "flags: " << "COMPUTE ";
+      if (queuFam.queueFlags & vk::QueueFlagBits::eGraphics) {
+        std::cout << "flags: " << "GRAPHICS ";
+        // it turns out that a graphics queue family does not have to
+        // necessarily support the presentation!
+        // actually same queue family which supports drawing does not have to
+        // support presentation
+        vk::Bool32 surfaceSupported =
+            physicalDevice.getSurfaceSupportKHR(counter, surface);
+        if (surfaceSupported)
+          graphicsFamilyIndex = counter;
+      }
+      if (queuFam.queueFlags & vk::QueueFlagBits::eTransfer)
+        std::cout << "flags: " << "MEMORY TRANSFER ";
+      if (queuFam.queueFlags & vk::QueueFlagBits::eVideoDecodeKHR)
+        std::cout << "flags: " << "VIDEO DECODE ";
+      if (queuFam.queueFlags & vk::QueueFlagBits::eVideoEncodeKHR)
+        std::cout << "flags: " << "VIDEO ENCODE ";
+      std::cout << std::endl;
+      counter++;
+    }
+    if (graphicsFamilyIndex == -1)
+      throw std::runtime_error(
+          "Couldn't find appropriate Queue familiy, terminating\n");
+    std::cout << "Number of Queue families: "
+              << physicalDevice.getQueueFamilyProperties().size() << std::endl;
+    std::cout << "Graphixs Family Index: " << graphicsFamilyIndex << std::endl;
+    float queuePriority = 0.0f;
+    vk::DeviceQueueCreateInfo deviceQueueCreateInfo{
+        .queueFamilyIndex = graphicsFamilyIndex,
+        .queueCount = 1,
+        .pQueuePriorities = &queuePriority,
+    };
+    vk::StructureChain<vk::PhysicalDeviceFeatures2,
+                       vk::PhysicalDeviceVulkan13Features,
+                       vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>
+        featureChain{
+            {}, {.dynamicRendering = true}, {.extendedDynamicState = true}};
+
+    vk::DeviceCreateInfo deviceCreateInfo{
+        .pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
+        .queueCreateInfoCount = 1,
+        .pQueueCreateInfos = &deviceQueueCreateInfo,
+        .enabledExtensionCount =
+            static_cast<uint32_t>(requiredDeviceExtension.size()),
+        .ppEnabledExtensionNames = requiredDeviceExtension.data(),
+    };
+    device = vk::raii::Device(physicalDevice, deviceCreateInfo);
+    graphicsQueue = vk::raii::Queue(device, graphicsFamilyIndex, 0);
+    // assume present queue will be the same as graphics queue, ususally it
+    // needs to be queried for
+    presentQueue = vk::raii::Queue(device, graphicsFamilyIndex, 0);
+  }
+
+  void createSurface() {
+    VkSurfaceKHR _surface;
+    if (glfwCreateWindowSurface(*instance, window, NULL, &_surface) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("Error when creating the Vulkan surface.\n");
+    }
+    surface = vk::raii::SurfaceKHR(instance, _surface);
+  }
+
+  void createImageViews() {
+    swapChainImageViews.clear();
+    vk::ImageViewCreateInfo imageViewCreateInfo{
+        .viewType = vk::ImageViewType::e2D,
+        .format = swapChainImageFormat,
+        .components =
+            vk::ComponentMapping{
+                .r = vk::ComponentSwizzle::eR,
+                .g = vk::ComponentSwizzle::eG,
+                .b = vk::ComponentSwizzle::eB,
+                .a = vk::ComponentSwizzle::eA,
+            },
+        .subresourceRange =
+            vk::ImageSubresourceRange{
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+
+            },
+    };
+    for (const auto &image : swapChainImages) {
+      imageViewCreateInfo.image = image;
+      swapChainImageViews.emplace_back(device, imageViewCreateInfo);
+    }
+  }
+
+  void createGraphicsPipeline() {
+    auto shaderModule = createShaderModule(readFile("shaders/slang.spv"));
+
+    vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
+        .stage = vk::ShaderStageFlagBits::eVertex,
+        .module = shaderModule,
+        .pName = "vertMain",
+    };
+    vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
+        .stage = vk::ShaderStageFlagBits::eFragment,
+        .module = shaderModule,
+        .pName = "fragMain",
+    };
+    vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo,
+                                                        fragShaderStageInfo};
+  }
+
+  [[nodiscard]] vk::raii::ShaderModule
+  createShaderModule(const std::vector<char> &code) {
+    auto shaderModuleCreateInfo = vk::ShaderModuleCreateInfo{
+        .codeSize = code.size() * sizeof(char),
+        .pCode = reinterpret_cast<const uint32_t *>(code.data())};
+    return vk::raii::ShaderModule(device, shaderModuleCreateInfo);
+  }
+
   void initWindow() {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -231,26 +514,12 @@ private:
   void initVulkan() {
     createInstance();
     setupDebugMessenger();
+    createSurface();
     pickPhysicalDevice();
-    std::cout << physicalDevice.getProperties().deviceName << std::endl;
-    vk::QueueFamilyProperties pr;
-    vk::QueueFlags qf;
-    for (const auto &queuFam : physicalDevice.getQueueFamilyProperties()) {
-      std::cout << "familiy has: " << queuFam.queueCount << "queus, ";
-      if (queuFam.queueFlags & vk::QueueFlagBits::eCompute)
-        std::cout << "flags: " << "COMPUTE ";
-      if (queuFam.queueFlags & vk::QueueFlagBits::eGraphics)
-        std::cout << "flags: " << "GRAPHICS ";
-      if (queuFam.queueFlags & vk::QueueFlagBits::eTransfer)
-        std::cout << "flags: " << "MEMORY TRANSFER ";
-      if (queuFam.queueFlags & vk::QueueFlagBits::eVideoDecodeKHR)
-        std::cout << "flags: " << "VIDEO DECODE ";
-      if (queuFam.queueFlags & vk::QueueFlagBits::eVideoEncodeKHR)
-        std::cout << "flags: " << "VIDEO ENCODE ";
-      std::cout << std::endl;
-    }
-    std::cout << "Number of Queue families: "
-              << physicalDevice.getQueueFamilyProperties().size() << std::endl;
+    createLogicalDevice();
+    createSwapChain();
+    createImageViews();
+    createGraphicsPipeline();
   }
 
   void mainLoop() {

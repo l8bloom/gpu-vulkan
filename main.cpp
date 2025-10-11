@@ -25,8 +25,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-constexpr uint32_t WINDOW_WIDTH = 800;
-constexpr uint32_t WINDOW_HEIGHT = 600;
+constexpr uint32_t WINDOW_WIDTH = 2560;
+constexpr uint32_t WINDOW_HEIGHT = 1440;
 
 const std::vector validationLayers = {
     "VK_LAYER_KHRONOS_validation",
@@ -43,9 +43,9 @@ public:
   void run() {
     initWindow();
     initVulkan();
-    auto time_st = std::chrono::high_resolution_clock::now();
+    auto time_st = std::chrono::steady_clock::now();
     mainLoop();
-    auto time_en = std::chrono::high_resolution_clock::now();
+    auto time_en = std::chrono::steady_clock::now();
     std::cout << "Main loop ran for: " << (time_en - time_st) / 1e9
               << std::endl;
     std::cout << " Number of frames: " << framesCount << std::endl;
@@ -393,7 +393,13 @@ private:
     swapChainCreateInfo.pQueueFamilyIndices = 0;
     swapChain = vk::raii::SwapchainKHR(device, swapChainCreateInfo);
     swapChainImages = swapChain.getImages();
+
     std::cout << "Number of swap chain images: " << swapChainImages.size()
+              << std::endl
+              << "Max number of image layers: "
+              << surfaceCapabilities.maxImageArrayLayers << std::endl
+              << "Current transform value returned by the surface(WSI): "
+              << vk::to_string(surfaceCapabilities.currentTransform)
               << std::endl;
   }
 
@@ -546,6 +552,8 @@ private:
             vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
             vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
     };
+    // happens after the fragment shader
+    // Common use cases: transparency, additive glow, particle effects, etc.
     vk::PipelineColorBlendStateCreateInfo colorBlending{
         .logicOpEnable = vk::False,
         .logicOp = vk::LogicOp::eCopy,
@@ -619,6 +627,7 @@ private:
                             vk::PipelineStageFlagBits2::eTopOfPipe,
                             vk::PipelineStageFlagBits2::eColorAttachmentOutput);
     vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
+    // vk::ClearValue clearColor = vk::ClearColorValue(0.5f, 0.5f, 0.5f, 1.0f);
     vk::RenderingAttachmentInfo attachmentInfo = {
         .imageView = swapChainImageViews[imageIndex],
         .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
@@ -645,7 +654,7 @@ private:
     commandBuffer.setScissor(0,
                              vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
     // fucking finally
-    commandBuffer.draw(3, 1, 0, 0);
+    commandBuffer.draw(6, 1, 0, 0);
     commandBuffer.endRendering();
     transition_image_layout(imageIndex,
                             vk::ImageLayout::eColorAttachmentOptimal,
@@ -690,12 +699,12 @@ private:
   }
 
   void drawFrame() {
-    graphicsQueue.waitIdle();
+    graphicsQueue.waitIdle(); // I don't think this is needed here
     presentQueue.waitIdle();
     auto [result, imageIndex] = swapChain.acquireNextImage(
         UINT64_MAX, presentCompleteSemphore, nullptr);
     recordCommandBuffer(imageIndex);
-    device.resetFences(*drawFence);
+    device.resetFences(*drawFence); // resetting = unsignalling
     vk::PipelineStageFlags waitDestinationStageMask(
         vk::PipelineStageFlagBits::eColorAttachmentOutput);
     vk::SubmitInfo submitInfo{
@@ -721,6 +730,7 @@ private:
     result = presentQueue.presentKHR(presentInfoKHR);
     switch (result) {
     case vk::Result::eSuccess:
+      // std::cout << vk::to_string(result);
       break;
     case vk::Result::eSuboptimalKHR:
       std::cout
@@ -772,7 +782,7 @@ private:
   }
 
   void cleanup() {
-    // NOTE: this is too early phase to release the window, it seems that
+    // NOTE: this is too early to release the window, it seems that
     // wayland compositor snaps and the windowing system freezes here, since the
     // object will on destructing do a 2nd free() of the wayland surface
     // glfwDestroyWindow(window);
@@ -784,6 +794,7 @@ int main() {
   HelloTriangleApplication app;
   try {
     app.run();
+    // throw std::runtime_error("Smth went wrong on purpose");
   } catch (const std::exception &exc) {
     std::cerr << exc.what() << std::endl;
     return EXIT_FAILURE;

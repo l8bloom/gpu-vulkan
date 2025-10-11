@@ -22,7 +22,6 @@ if [[ "$1" == "release" ]]; then
 	-D SHADER_SLANG_SOURCES="shader.slang" \
 	-G Ninja
 else
-    rm -rf ./build
     cmake \
         -S . \
 	-B build \

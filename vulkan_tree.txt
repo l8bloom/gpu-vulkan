@@ -1,0 +1,295 @@
+Application
+└── Instance [vk::raii::Instance ✅]
+    ├── Debug Messenger [vk::raii::DebugUtilsMessengerEXT ✅]
+    ├── Physical Devices [vk::PhysicalDevice ❌]  (enumerated, not destroyed)
+    │   └── Device [vk::raii::Device ✅]
+    │       ├── Queues [vk::Queue ❌]  (retrieved, not destroyed)
+    │       ├── SwapchainKHR [vk::raii::SwapchainKHR ✅]
+    │       │   ├── Images [vk::Image ❌]  (owned by swapchain)
+    │       │   └── ImageViews [vk::raii::ImageView ✅]
+    │       ├── RenderPass [vk::raii::RenderPass ✅]
+    │       ├── Framebuffers [vk::raii::Framebuffer ✅]
+    │       ├── CommandPool [vk::raii::CommandPool ✅]
+    │       │   └── CommandBuffers [vk::raii::CommandBuffer ✅]
+    │       ├── Buffers [vk::raii::Buffer ✅]
+    │       ├── Images (custom) [vk::raii::Image ✅]
+    │       ├── Samplers [vk::raii::Sampler ✅]
+    │       ├── ShaderModules [vk::raii::ShaderModule ✅]
+    │       ├── Pipelines [vk::raii::Pipeline ✅]
+    │       ├── PipelineLayouts [vk::raii::PipelineLayout ✅]
+    │       ├── DescriptorSetLayouts [vk::raii::DescriptorSetLayout ✅]
+    │       ├── DescriptorPool [vk::raii::DescriptorPool ✅]
+    │       │   └── DescriptorSets [vk::DescriptorSet ❌] (freed with pool)
+    │       ├── Semaphores [vk::raii::Semaphore ✅]
+    │       ├── Fences [vk::raii::Fence ✅]
+    │       └── Events [vk::raii::Event ✅]
+    └── SurfaceKHR [vk::raii::SurfaceKHR ✅]
+
+ChatGpt advice:
+
+🧩 1. You don’t need to know everything right now
+
+Vulkan is a giant Lego box. Each type/struct is one Lego brick.
+To draw a triangle, you only need:
+
+Swapchain (images to draw into)
+
+Image views (a way to look at those images)
+
+Pipeline (shaders + fixed-function config)
+
+Command buffer (recording the work: clear → bind pipeline → draw → present)
+
+That’s it. All the other fancy stuff (descriptors, instancing, multisampling, compute queues) are later expansions.
+
+So if you keep your head wrapped around “my triangle pipeline only needs 5–6 structs wired together”, the rest can wait.
+
+## How long till mastery? ##
+
+Ah, the classic “how long to stop being afraid of Vulkan” question 😅
+
+Honestly, it’s less about raw hours and more about experience with the full round-trip of GPU work.
+Here’s a rough guideline for someone with solid C++ and graphics background (like you):
+
+1️⃣ Foundations – 1–2 weeks
+
+Swapchains, images, image views, and framebuffers
+
+Command buffers & recording a triangle
+
+Shader modules and pipeline creation
+
+Render passes vs dynamic rendering
+
+Goal: get a triangle rendering without fear. You’ll know what each Vulkan object is doing.
+
+2️⃣ Core Concepts – 2–4 weeks
+
+Multiple framebuffers & multiple attachments (color/depth/stencil)
+
+Pipeline state objects: input assembly, rasterization, blend states
+
+Descriptor sets and uniforms
+
+Synchronization primitives: semaphores, fences, barriers
+
+Goal: can create pipelines with different attachments, pass data to shaders, and not break validation layers.
+
+3️⃣ Intermediate / Practical – 1–2 months
+
+Multiple queues (graphics + transfer + compute)
+
+Multi-threaded command buffer recording
+
+Dynamic states (viewport/scissor) and changing attachments on the fly
+
+Render to textures, post-processing, frame graph thinking
+
+Goal: feel comfortable orchestrating resources and pipelines without constantly looking up docs.
+
+4️⃣ Optional “pro” experience
+
+Ray tracing, mesh shaders, advanced GPU features
+
+Optimizations: descriptor indexing, pipeline caches
+
+Integration into a small engine or reusable framework
+
+Goal: mastery of Vulkan “power features,” but not required to feel solid.
+
+
+############### async cheat sheet
+
+Vulkan Sync Cheat Sheet
+✅ No GPU Sync Needed (CPU-side only)
+
+These happen instantly on CPU/driver, no need for fences/semaphores/barriers:
+
+vkCreate* / vkDestroy* (buffers, images, pipelines, shaders, etc.)
+
+vkGet* / vkEnumerate* (query functions)
+
+vkAllocateMemory / vkFreeMemory
+
+vkMapMemory / vkUnmapMemory (though flushing/invalidation may be needed for coherence)
+
+Filling out Vk*CreateInfo structs
+
+Recording commands into a VkCommandBuffer (this just builds CPU-side lists)
+
+Think: setup/configuration/queries → safe, no GPU sync.
+
+⚠️ Requires GPU Sync (Work is asynchronous!)
+
+These enqueue work to GPU, so you must care about execution order:
+
+Submitting Work
+
+vkQueueSubmit → puts command buffers on GPU queue
+
+vkQueuePresentKHR → schedules presenting to screen
+
+Inside Command Buffers
+
+vkCmdDraw, vkCmdDrawIndexed (graphics)
+
+vkCmdDispatch (compute)
+
+vkCmdCopy* / vkCmdBlit* (transfers)
+
+vkCmdClear*
+
+vkCmdPipelineBarrier2 (explicit sync tool)
+
+These commands return immediately, but GPU work happens later.
+Use semaphores/fences/barriers to define dependencies.
+
+
+You’ve basically crossed the bridge from software that reports to software that reveals.
+Once you start seeing GPU memory barriers and swapchains as “visual I/O buffers,”
+you realize there’s no magic in graphics — it’s all just data orchestration, like you’ve been doing all along, only now you can see the math.
+
+
+## Vrlo bitna analogija ##
+
+Cool 😎 — let’s walk through what really happens between your drawFrame() call and a photon leaving your monitor.
+We’ll keep it low-level but intuitive — it’s the literal life of a pixel in your Vulkan + Wayland system.
+
+🧩 Stage 0 — You start the frame
+
+You call something like:
+
+uint32_t imageIndex = device.acquireNextImageKHR(...);
+recordCommands(commandBuffer, imageIndex);
+submit(queue, commandBuffer, imageAvailable, renderFinished);
+present(queue, swapchain, imageIndex, renderFinished);
+
+
+Each of these is a trigger for a cascade of work inside the driver and GPU.
+
+⚙️ Stage 1 — Acquire: “Give me an empty bottle”
+
+vkAcquireNextImageKHR asks the WSI (Window System Integration) layer for a swapchain image that’s ready to render into.
+
+The driver tracks which images Wayland has already displayed and which are free.
+
+When an image becomes available, the driver signals your imageAvailable semaphore.
+
+At this point, you own one chunk of GPU memory (often in VRAM) that corresponds to the next screen buffer.
+
+🎨 Stage 2 — Command buffer execution: “Fill the bottle”
+
+When you submit your recorded commands:
+
+Command buffer parse – The GPU’s front-end reads your recorded Vulkan commands from memory.
+
+Vertex fetch – It DMAs vertex data from buffers in VRAM.
+
+Vertex shading – Runs your vertex shader for each vertex.
+
+Primitive assembly / rasterization – Turns triangles into fragments (potential pixels).
+
+Fragment shading – Computes color values for each fragment.
+
+Color blending / attachment writes – Writes those RGBA values into the color attachment of your framebuffer — which is your swapchain image.
+
+At this stage, the “juice” (your pixel data) is now physically written into GPU memory.
+
+🚦 Stage 3 — Synchronization: “Seal the bottle”
+
+Your render finishes → the GPU signals renderFinished.
+That semaphore tells the WSI layer that your image is ready to be presented.
+
+No bytes have moved to the display yet — the image still lives in GPU VRAM.
+
+🖼️ Stage 4 — Present: “Send to the distributor”
+
+vkQueuePresentKHR passes a handle to the WSI implementation (e.g. libvulkan_wsi_wayland.so for Wayland).
+
+The WSI calls into the Wayland protocol (wl_surface.attach, wl_surface.commit).
+
+Wayland’s compositor (like Mutter, KWin, or Weston) receives a buffer handle — not the pixels themselves.
+
+The compositor schedules that buffer for composition with other windows.
+
+Still, no copy usually happens; Wayland uses DMA-BUF / GBM so both your app and compositor refer to the same GPU memory.
+
+🧮 Stage 5 — Composition: “Mix all the juices”
+
+At each display refresh:
+
+The compositor may composite your window with others into a final screen-sized buffer.
+
+If your window is opaque and fullscreen → it can do a zero-copy page flip (your buffer becomes the scanout image directly).
+
+Otherwise → the compositor runs a small GPU pass to blend windows and draw decorations.
+
+📡 Stage 6 — Scanout: “Pour into the glass”
+
+The display engine (a separate fixed-function part of the GPU, not shaders) reads the final framebuffer over a DMA path and converts it into:
+
+Pixel stream → HDMI/DP electrical signals
+
+Frame timings → vertical sync pulses
+
+Color-space conversion → e.g. linear → sRGB
+
+Each pixel value (your RGBA8, etc.) gets turned into actual voltages that drive subpixels on the LCD/OLED panel.
+
+Now your triangle is light. 🌈
+
+🧠 Stage 7 — Human vision: “Taste the apple juice”
+
+Your retina’s cones respond to that light, your visual cortex decodes patterns, and your brain perceives:
+
+“Ah, a red triangle.”
+
+That’s the complete dataflow from vkQueuePresentKHR() → neuron spikes.
+
+🧾 Summary pipeline
+
+CPU
+  ↓  (record commands)
+GPU Command Processor
+  ↓
+Shader Cores / Render Backend
+  ↓
+Swapchain Image in VRAM
+  ↓
+WSI (Vulkan ↔ Wayland)
+  ↓
+Wayland Compositor
+  ↓
+Display Engine / Scanout
+  ↓
+Monitor Panel
+  ↓
+Photon hits retina
+
+
+Every frame, this entire chain runs — often hundreds of times per second.
+
+So yeah — your triangle’s “printf to photons” path is literally a distributed, hardware-synchronized data pipeline.
+Your drawFrame() is producing the apple juice,
+Wayland is the bottling plant,
+and your monitor is the tap at the bar. 🍻
+
+
+
+You only step in with barriers when you change resource usage (e.g. from color output → presentation).
+
+
+   [Shader cores]
+        │
+        ▼
+   ┌───────────────┐
+   │ Registers     │  (per-thread)
+   ├───────────────┤
+   │ L1 cache      │  (per-core)
+   ├───────────────┤
+   │ L2 cache      │  (shared across GPU)
+   ├───────────────┤
+   │ VRAM (global) │  (slowest, but visible to everyone)
+   └───────────────┘
+
+

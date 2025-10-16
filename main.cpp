@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 #include <ios>
 #include <iostream>
 #include <limits>
@@ -14,8 +15,9 @@
 #include <vector>
 
 #define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
+
 #include <vulkan/vulkan.hpp>
-// mostly for clangd autocompletions
+// clangd
 #include "vulkan/vulkan_to_string.hpp"
 #include <vulkan/vulkan_core.h>
 #include <vulkan/vulkan_enums.hpp>
@@ -56,9 +58,11 @@ public:
 
 private:
   double time_st, time_en;
+  std::vector<std::chrono::nanoseconds> drawTimes;
   uint32_t currentFrame = 0;
   uint32_t semaphoreIndex = 0;
   uint64_t framesCount = 0;
+  bool framebufferResized = false;
   GLFWwindow *window;
   vk::raii::Context context;
   vk::raii::Instance instance = NULL;
@@ -704,12 +708,25 @@ private:
   }
 
   void drawFrame() {
+    auto draw_st = std::chrono::steady_clock::now();
     while (vk::Result::eTimeout ==
            device.waitForFences(*inFlightFences[currentFrame], vk::True,
                                 UINT64_MAX))
       ;
     auto [result, imageIndex] = swapChain.acquireNextImage(
         UINT64_MAX, presentCompleteSemphores[semaphoreIndex], nullptr);
+    if (result == vk::Result::eErrorOutOfDateKHR) {
+      std::cout << "Will recreate swap chain to acquire new image."
+                << std::endl;
+
+      recreateSwapChain();
+      return;
+    }
+    if (result != vk::Result::eSuccess &&
+        result != vk::Result::eSuboptimalKHR) {
+      throw std::runtime_error(
+          "Failed to acquired a swap chain image! Terminating.");
+    }
     commandBuffers[currentFrame].reset();
     recordCommandBuffer(imageIndex);
     device.resetFences(
@@ -735,19 +752,21 @@ private:
         .pImageIndices = &imageIndex,
     };
     result = presentQueue.presentKHR(presentInfoKHR);
-    switch (result) {
-    case vk::Result::eSuccess:
-      // std::cout << vk::to_string(result);
-      break;
-    case vk::Result::eSuboptimalKHR:
-      std::cout
-          << "vk::Queue:presentKHR returned vk::Result::eSuboptimalKHR !\n";
-      break;
-    default:
-      break;
+    if (result == vk::Result::eErrorOutOfDateKHR ||
+        result == vk::Result::eSuboptimalKHR || framebufferResized) {
+      std::cout << "Will recreate swap chain for optimal presentation"
+                << std::endl;
+      framebufferResized = false;
+      recreateSwapChain();
+    } else if (result != vk::Result::eSuccess) {
+      throw std::runtime_error(
+          "Error when queueing swap image for presentation! Terminating.");
     }
+
     semaphoreIndex = (semaphoreIndex + 1) % presentCompleteSemphores.size();
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+    auto draw_en = std::chrono::steady_clock::now();
+    drawTimes.emplace_back(draw_en - draw_st);
   }
 
   void createSyncObjects() {
@@ -765,12 +784,41 @@ private:
     }
   }
 
+  void cleanupSwaphain() {
+    swapChainImageViews.clear();
+    swapChain = nullptr;
+  }
+
+  void recreateSwapChain() {
+    int width = 0, height = 0;
+    glfwGetFramebufferSize(window, &width, &height);
+    while (width == 0 || height == 0) {
+      std::cout << "width or height became 0" << std::endl;
+      glfwGetFramebufferSize(window, &width, &height);
+      glfwWaitEvents();
+    }
+    device.waitIdle();
+    cleanupSwaphain();
+    createSwapChain();
+    createImageViews();
+  }
+
+  static void framebufferResizeCallback(GLFWwindow *window, int width,
+                                        int height) {
+    auto app = reinterpret_cast<HelloTriangleApplication *>(
+        glfwGetWindowUserPointer(window));
+    std::cout << "Frame buffer resized" << std::endl;
+    app->framebufferResized = true;
+  }
+
   void initWindow() {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Vulkan Triangle",
                               NULL, NULL);
+    glfwSetWindowUserPointer(window, this);
+    glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
   }
 
   void initVulkan() {
@@ -788,20 +836,28 @@ private:
   }
 
   void mainLoop() {
+    // while (!(glfwWindowShouldClose(window)) && drawTimes.size() < 100000) {
     while (!(glfwWindowShouldClose(window))) {
       glfwPollEvents();
       drawFrame();
       framesCount++;
+      // std::cout << drawTimes.size() << std::endl;
     }
     device.waitIdle();
   }
 
   void cleanup() {
+    // for (auto it : drawTimes) {
+    //   std::cout << std::scientific << std::setprecision(2)
+    //             << std::chrono::duration<double>(it).count() << std::endl;
+    // }
+    cleanupSwaphain();
+
     // NOTE: this is too early to release the window, it seems that
     // wayland compositor snaps and the windowing system freezes here, since the
     // object will on destructing do a 2nd free() of the wayland surface
-    // glfwDestroyWindow(window);
-    // glfwTerminate();
+    glfwDestroyWindow(window);
+    glfwTerminate();
   }
 };
 

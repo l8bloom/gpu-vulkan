@@ -27,6 +27,9 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include <glm/ext/vector_float2.hpp>
+#include <glm/glm.hpp>
+
 constexpr uint32_t WINDOW_WIDTH = 2560;
 constexpr uint32_t WINDOW_HEIGHT = 1440;
 
@@ -41,6 +44,54 @@ constexpr auto enableValidationLayers = false;
 #else
 constexpr auto enableValidationLayers = true;
 #endif
+
+struct Vertex {
+  glm::vec2 pos;
+  glm::vec3 color;
+
+  // these type of stuff is actually bridging cpu data with shader expectations,
+  // essentially a contract between the two
+  static vk::VertexInputBindingDescription getBindingDescription() {
+    return vk::VertexInputBindingDescription{
+        .binding = 0,
+        .stride = sizeof(Vertex),
+        .inputRate = vk::VertexInputRate::eVertex,
+    };
+  }
+  static std::array<vk::VertexInputAttributeDescription, 2>
+  getAttributeDescriptions() {
+    return {
+        vk::VertexInputAttributeDescription{
+            .location = 0,
+            .binding = 0,
+            .format = vk::Format::eR32G32Sfloat,
+            .offset = offsetof(Vertex, pos),
+        },
+        vk::VertexInputAttributeDescription{
+            .location = 1,
+            .binding = 0,
+            .format = vk::Format::eR32G32B32Sfloat,
+            .offset = offsetof(Vertex, color),
+        },
+
+    };
+  }
+};
+
+std::vector<Vertex> vertices = {
+    {
+        .pos = {0.0f, -0.5f},
+        .color = {1.0f, 0.0f, 0.0f},
+    },
+    {
+        .pos = {0.5f, 0.5f},
+        .color = {0.0f, 1.0f, 0.0f},
+    },
+    {
+        .pos = {-0.5f, 0.5f},
+        .color = {0.0f, 0.0f, 1.0f},
+    },
+};
 
 class HelloTriangleApplication {
 public:
@@ -532,7 +583,15 @@ private:
         fragShaderStageInfo,
     };
 
-    vk::PipelineVertexInputStateCreateInfo vertexinputInfo;
+    auto bindingDescription = Vertex::getBindingDescription();
+    auto attributeDescriptions = Vertex::getAttributeDescriptions();
+    vk::PipelineVertexInputStateCreateInfo vertexinputInfo{
+        .vertexBindingDescriptionCount = 1,
+        .pVertexBindingDescriptions = &bindingDescription,
+        .vertexAttributeDescriptionCount = attributeDescriptions.size(),
+        .pVertexAttributeDescriptions = attributeDescriptions.data(),
+
+    };
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
         .topology = vk::PrimitiveTopology::eTriangleList,
     };

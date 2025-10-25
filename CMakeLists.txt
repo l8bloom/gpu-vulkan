@@ -7,6 +7,7 @@ find_package(Vulkan REQUIRED)
 find_package(glfw3 REQUIRED)
 
 add_executable(vulkos main.cpp)
+#add_executable(vulkos their_main.cpp)
 target_link_libraries(vulkos PRIVATE Vulkan::Vulkan glfw)
 
 function (add_slang_shader_target TARGET)

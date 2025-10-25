@@ -78,19 +78,16 @@ struct Vertex {
   }
 };
 
-std::vector<Vertex> vertices = {
-    {
-        .pos = {0.0f, -0.5f},
-        .color = {1.0f, 0.0f, 0.0f},
-    },
-    {
-        .pos = {0.5f, 0.5f},
-        .color = {0.0f, 1.0f, 0.0f},
-    },
-    {
-        .pos = {-0.5f, 0.5f},
-        .color = {0.0f, 0.0f, 1.0f},
-    },
+// const std::vector<Vertex> vertices = {
+//     {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+//     {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+//     {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+// };
+
+const std::vector<Vertex> vertices = {
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}}, {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},  {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},  {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
 };
 
 class HelloTriangleApplication {
@@ -142,6 +139,8 @@ private:
   std::vector<vk::raii::Semaphore> presentCompleteSemphores;
   std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
   std::vector<vk::raii::Fence> inFlightFences;
+  vk::raii::Buffer vertexBuffer = VK_NULL_HANDLE;
+  vk::raii::DeviceMemory vertexBufferMemory = VK_NULL_HANDLE;
 
   static std::string
   stringifySeverityFlag(vk::DebugUtilsMessageSeverityFlagBitsEXT severity) {
@@ -716,13 +715,14 @@ private:
     commandBuffers[currentFrame].beginRendering(renderingInfo);
     commandBuffers[currentFrame].bindPipeline(vk::PipelineBindPoint::eGraphics,
                                               graphicsPipeline);
+    commandBuffers[currentFrame].bindVertexBuffers(0, *vertexBuffer, {0});
     commandBuffers[currentFrame].setViewport(
         0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width),
                         static_cast<float>(swapChainExtent.height)));
     commandBuffers[currentFrame].setScissor(
         0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
     // fucking finally
-    commandBuffers[currentFrame].draw(6, 1, 0, 0);
+    commandBuffers[currentFrame].draw(vertices.size(), 1, 0, 0);
     commandBuffers[currentFrame].endRendering();
     transition_image_layout(imageIndex,
                             vk::ImageLayout::eColorAttachmentOptimal,
@@ -870,6 +870,49 @@ private:
     app->framebufferResized = true;
   }
 
+  void createVertexBuffer() {
+    vk::BufferCreateInfo bufferInfo{
+        .size = sizeof(vertices[0]) * vertices.size(),
+        .usage = vk::BufferUsageFlagBits::eVertexBuffer,
+        .sharingMode = vk::SharingMode::eExclusive,
+    };
+    vertexBuffer = vk::raii::Buffer(device, bufferInfo);
+    auto memRequirements = vertexBuffer.getMemoryRequirements();
+
+    // allocate memory by combining the requirements and what does the GPU
+    // actually provides
+    vk::MemoryAllocateInfo memoryAllocateInfo{
+        .allocationSize = memRequirements.size,
+        .memoryTypeIndex =
+            findMemoryType(memRequirements.memoryTypeBits,
+                           vk::MemoryPropertyFlagBits::eHostVisible |
+                               vk::MemoryPropertyFlagBits::eHostCoherent),
+    };
+    vertexBufferMemory = vk::raii::DeviceMemory(device, memoryAllocateInfo);
+    vertexBuffer.bindMemory(*vertexBufferMemory, 0);
+
+    // this is MMIO, first map the VRAM memory to the process's virtual address
+    // space, afterward it is a simple memcpy, mapping is a sys call, while
+    // memcpy is not
+    void *data = vertexBufferMemory.mapMemory(0, bufferInfo.size);
+    memcpy(data, vertices.data(), bufferInfo.size);
+    vertexBufferMemory.unmapMemory();
+  }
+
+  uint32_t findMemoryType(uint32_t typeFilter,
+                          vk::MemoryPropertyFlags properties) {
+    vk::PhysicalDeviceMemoryProperties memProperties =
+        physicalDevice.getMemoryProperties();
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+      if ((typeFilter & (1 << i)) &&
+          (memProperties.memoryTypes[i].propertyFlags & properties) ==
+              properties) {
+        return i;
+      }
+    }
+    throw std::runtime_error("failed to find suitable memory type!");
+  }
+
   void initWindow() {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -890,6 +933,7 @@ private:
     createImageViews();
     createGraphicsPipeline();
     createCommandPool();
+    createVertexBuffer();
     createCommandBuffers();
     createSyncObjects();
   }
@@ -913,8 +957,8 @@ private:
     cleanupSwaphain();
 
     // NOTE: this is too early to release the window, it seems that
-    // wayland compositor snaps and the windowing system freezes here, since the
-    // object will on destructing do a 2nd free() of the wayland surface
+    // wayland compositor snaps and the windowing system freezes here, since
+    // the object will on destructing do a 2nd free() of the wayland surface
     glfwDestroyWindow(window);
     glfwTerminate();
   }

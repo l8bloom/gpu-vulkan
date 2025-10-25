@@ -20,6 +20,6 @@ VSOutput vertMain(VSInput input) {
 [shader("fragment")]
 float4 fragMain(VSOutput vertIn) : SV_Target{
   //return float4(0.2 * color.b, 0.5* color.g, 0.3 * color.r, 1);
-  //return float4(0.0, 1.0, 0.0, 1.0);
+  return float4(0.0, 1.0, 0.0, 1.0);
   return float4(vertIn.color, 1.0);
 }

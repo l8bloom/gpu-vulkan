@@ -293,3 +293,24 @@ You only step in with barriers when you change resource usage (e.g. from color o
    └───────────────┘
 
 
+
+Your 3D mesh surface is not volumetric; it’s a skin — a continuous 2D sheet “living” in 3D.
+
+
+
+| Plant concept       | Programming equivalent                        | Why it fits                                                                                                                     |
+| ------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| **Seed**            | 🧩 **Source code / template**                 | It contains *everything* the future plant (program) will become — all the instructions are inside.                              |
+| **Germination**     | 🚀 **Compiling or building**                  | The code (seed) activates and starts creating a running version of itself.                                                      |
+| **Root system**     | 🗄️ **Database / foundational modules**       | Provides stability and feeds the rest of the system with resources (data, dependencies).                                        |
+| **Stem**            | 🧠 **Main architecture / core framework**     | The central structure everything else grows from.                                                                               |
+| **Leaves**          | 🖥️ **UI, front-end, or interface layer**     | They gather input (light = data), process it (photosynthesis = computation), and make energy/output for the rest of the system. |
+| **Photosynthesis**  | ⚙️ **Processing / computation**               | Turning inputs (sunlight, CO₂, water) into usable energy — just like turning input data into output.                            |
+| **Flower**          | 🎯 **Feature or service endpoint**            | The “purposeful” part of the program that interacts with the outside world — where action happens.                              |
+| **Pollination**     | 🔗 **API calls / data exchange**              | Sharing information between systems (plants) to create new results (seeds).                                                     |
+| **Fertilization**   | 🧬 **Successful data merge or deployment**    | When two inputs (pollen + ovule) combine to make a new version (seed / new build).                                              |
+| **Fruit**           | 📦 **Packaged product / release build**       | Contains the deliverable (seed) inside a user-friendly wrapper (fruit flesh).                                                   |
+| **Seed dispersal**  | ☁️ **Distribution / deployment**              | Sending copies (seeds) out into the world — app stores, servers, or new soil (devices).                                         |
+| **Annual plant**    | 🧮 **Short-lived script or microservice**     | Does its job, then terminates.                                                                                                  |
+| **Perennial plant** | 🏗️ **Long-running service or legacy system** | Keeps operating, updated season after season.                                                                                   |
+| **Weeds**           | 🐛 **Bugs or spam processes**                 | Unwanted, hard to kill, somehow always growing where you don’t want them. 😆                                                    |

@@ -466,9 +466,9 @@ private:
     for (const auto &queuFam : physicalDevice.getQueueFamilyProperties()) {
       std::cout << "familiy has: " << queuFam.queueCount << "queus, ";
       if (queuFam.queueFlags & vk::QueueFlagBits::eCompute)
-        std::cout << "flags: " << "COMPUTE ";
+        std::cout << "flags: " << "COMPUTE, ";
       if (queuFam.queueFlags & vk::QueueFlagBits::eGraphics) {
-        std::cout << "flags: " << "GRAPHICS ";
+        std::cout << "flags: " << "GRAPHICS, ";
         // it turns out that a graphics queue family does not have to
         // necessarily support the presentation!
         // actually same queue family which supports drawing does not have to
@@ -479,11 +479,11 @@ private:
           graphicsFamilyIndex = counter;
       }
       if (queuFam.queueFlags & vk::QueueFlagBits::eTransfer)
-        std::cout << "flags: " << "MEMORY TRANSFER ";
+        std::cout << "flags: " << "MEMORY TRANSFER, ";
       if (queuFam.queueFlags & vk::QueueFlagBits::eVideoDecodeKHR)
-        std::cout << "flags: " << "VIDEO DECODE ";
+        std::cout << "flags: " << "VIDEO DECODE, ";
       if (queuFam.queueFlags & vk::QueueFlagBits::eVideoEncodeKHR)
-        std::cout << "flags: " << "VIDEO ENCODE ";
+        std::cout << "flags: " << "VIDEO ENCODE, ";
       std::cout << std::endl;
       counter++;
     }
@@ -870,33 +870,68 @@ private:
     app->framebufferResized = true;
   }
 
-  void createVertexBuffer() {
+  void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage,
+                    vk::MemoryPropertyFlags properties,
+                    vk::raii::Buffer &buffer,
+                    vk::raii::DeviceMemory &bufferMemory) {
     vk::BufferCreateInfo bufferInfo{
-        .size = sizeof(vertices[0]) * vertices.size(),
-        .usage = vk::BufferUsageFlagBits::eVertexBuffer,
+        .size = size,
+        .usage = usage,
         .sharingMode = vk::SharingMode::eExclusive,
     };
-    vertexBuffer = vk::raii::Buffer(device, bufferInfo);
-    auto memRequirements = vertexBuffer.getMemoryRequirements();
-
-    // allocate memory by combining the requirements and what does the GPU
-    // actually provides
-    vk::MemoryAllocateInfo memoryAllocateInfo{
+    buffer = vk::raii::Buffer(device, bufferInfo);
+    auto memRequirements = buffer.getMemoryRequirements();
+    vk::MemoryAllocateInfo memAllocateInfo{
         .allocationSize = memRequirements.size,
         .memoryTypeIndex =
-            findMemoryType(memRequirements.memoryTypeBits,
-                           vk::MemoryPropertyFlagBits::eHostVisible |
-                               vk::MemoryPropertyFlagBits::eHostCoherent),
+            findMemoryType(memRequirements.memoryTypeBits, properties),
     };
-    vertexBufferMemory = vk::raii::DeviceMemory(device, memoryAllocateInfo);
-    vertexBuffer.bindMemory(*vertexBufferMemory, 0);
+    bufferMemory = vk::raii::DeviceMemory(device, memAllocateInfo);
+    buffer.bindMemory(*bufferMemory, 0);
+  }
 
+  void createVertexBuffer() {
+    auto size = sizeof(vertices[0]) * vertices.size();
+    auto usage = vk::BufferUsageFlagBits::eTransferSrc;
+    auto memProperties = vk::MemoryPropertyFlagBits::eHostVisible |
+                         vk::MemoryPropertyFlagBits::eHostCoherent;
+    vk::raii::Buffer stagingBuffer = VK_NULL_HANDLE;
+    vk::raii::DeviceMemory stagingBufferMemory = VK_NULL_HANDLE;
+    createBuffer(size, usage, memProperties, stagingBuffer,
+                 stagingBufferMemory);
     // this is MMIO, first map the VRAM memory to the process's virtual address
     // space, afterward it is a simple memcpy, mapping is a sys call, while
     // memcpy is not
-    void *data = vertexBufferMemory.mapMemory(0, bufferInfo.size);
-    memcpy(data, vertices.data(), bufferInfo.size);
-    vertexBufferMemory.unmapMemory();
+    void *data = stagingBufferMemory.mapMemory(0, size);
+    memcpy(data, vertices.data(), size);
+    stagingBufferMemory.unmapMemory();
+
+    auto bufferUsage = vk::BufferUsageFlagBits::eVertexBuffer |
+                       vk::BufferUsageFlagBits::eTransferDst;
+    memProperties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+    createBuffer(size, bufferUsage, memProperties, vertexBuffer,
+                 vertexBufferMemory);
+    copyBuffer(stagingBuffer, vertexBuffer, size);
+  }
+
+  void copyBuffer(vk::raii::Buffer &srcBuffer, vk::raii::Buffer &dstBuffer,
+                  vk::DeviceSize size) {
+    vk::CommandBufferAllocateInfo allocInfo{
+        .commandPool = commandPool,
+        .level = vk::CommandBufferLevel::ePrimary,
+        .commandBufferCount = 1,
+    };
+    vk::raii::CommandBuffer commandCopyBuffer =
+        std::move(device.allocateCommandBuffers(allocInfo).front());
+    commandCopyBuffer.begin(vk::CommandBufferBeginInfo{
+        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+    commandCopyBuffer.copyBuffer(*srcBuffer, *dstBuffer,
+                                 vk::BufferCopy(0, 0, size));
+    commandCopyBuffer.end();
+    graphicsQueue.submit(vk::SubmitInfo{.commandBufferCount = 1,
+                                        .pCommandBuffers = &*commandCopyBuffer},
+                         nullptr);
+    graphicsQueue.waitIdle();
   }
 
   uint32_t findMemoryType(uint32_t typeFilter,

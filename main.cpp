@@ -85,9 +85,14 @@ struct Vertex {
 // };
 
 const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}}, {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},  {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},  {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}},
+};
+
+const std::vector<uint16_t> indices = {
+    0, 1, 2, 2, 3, 0,
 };
 
 class HelloTriangleApplication {
@@ -141,6 +146,8 @@ private:
   std::vector<vk::raii::Fence> inFlightFences;
   vk::raii::Buffer vertexBuffer = VK_NULL_HANDLE;
   vk::raii::DeviceMemory vertexBufferMemory = VK_NULL_HANDLE;
+  vk::raii::Buffer indexBuffer = VK_NULL_HANDLE;
+  vk::raii::DeviceMemory indexBufferMemory = VK_NULL_HANDLE;
 
   static std::string
   stringifySeverityFlag(vk::DebugUtilsMessageSeverityFlagBitsEXT severity) {
@@ -716,13 +723,15 @@ private:
     commandBuffers[currentFrame].bindPipeline(vk::PipelineBindPoint::eGraphics,
                                               graphicsPipeline);
     commandBuffers[currentFrame].bindVertexBuffers(0, *vertexBuffer, {0});
+    commandBuffers[currentFrame].bindIndexBuffer(*indexBuffer, 0,
+                                                 vk::IndexType::eUint16);
     commandBuffers[currentFrame].setViewport(
         0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width),
                         static_cast<float>(swapChainExtent.height)));
     commandBuffers[currentFrame].setScissor(
         0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
     // fucking finally
-    commandBuffers[currentFrame].draw(vertices.size(), 1, 0, 0);
+    commandBuffers[currentFrame].drawIndexed(indices.size(), 1, 0, 0, 0);
     commandBuffers[currentFrame].endRendering();
     transition_image_layout(imageIndex,
                             vk::ImageLayout::eColorAttachmentOptimal,
@@ -914,6 +923,27 @@ private:
     copyBuffer(stagingBuffer, vertexBuffer, size);
   }
 
+  void createIndexBuffer() {
+    auto size = sizeof(indices[0]) * indices.size();
+    auto usage = vk::BufferUsageFlagBits::eTransferSrc;
+    auto stagingBuffer = vk::raii::Buffer({});
+    auto stagingBufferMemory = vk::raii::DeviceMemory({});
+    createBuffer(size, usage,
+                 vk::MemoryPropertyFlagBits::eHostCoherent |
+                     vk::MemoryPropertyFlagBits::eHostVisible,
+                 stagingBuffer, stagingBufferMemory);
+    void *data = stagingBufferMemory.mapMemory(0, size);
+    memcpy(data, indices.data(), size);
+    stagingBufferMemory.unmapMemory();
+
+    createBuffer(size,
+                 vk::BufferUsageFlagBits::eTransferDst |
+                     vk::BufferUsageFlagBits::eIndexBuffer,
+                 vk::MemoryPropertyFlagBits::eDeviceLocal, indexBuffer,
+                 indexBufferMemory);
+    copyBuffer(stagingBuffer, indexBuffer, size);
+  }
+
   void copyBuffer(vk::raii::Buffer &srcBuffer, vk::raii::Buffer &dstBuffer,
                   vk::DeviceSize size) {
     vk::CommandBufferAllocateInfo allocInfo{
@@ -969,6 +999,7 @@ private:
     createGraphicsPipeline();
     createCommandPool();
     createVertexBuffer();
+    createIndexBuffer();
     createCommandBuffers();
     createSyncObjects();
   }

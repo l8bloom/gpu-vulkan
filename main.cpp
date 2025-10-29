@@ -35,6 +35,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb/stb_image.h"
+
 constexpr uint32_t WINDOW_WIDTH = 2560;
 constexpr uint32_t WINDOW_HEIGHT = 1440;
 

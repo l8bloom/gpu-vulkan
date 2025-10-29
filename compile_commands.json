@@ -1,7 +1,7 @@
 [
   {
     "directory": "/home/dom-ak45/Projects/misc/gpu/vulkanos/official_vulkan_tutorial",
-    "command": "clang++ -std=c++23 -I/home/dom-ak45/Downloads/glfw/include -I/home/dom-ak45/Downloads/vulkanSDK/1.4.321.1/x86_64/include main.cpp",
+    "command": "clang++ -std=c++23 -I/home/dom-ak45/Downloads/glfw/include -I/home/dom-ak45/Downloads/vulkanSDK/1.4.321.1/x86_64/include -I/home/dom-ak45/Projects/misc/gpu/vulkanos/official_vulkan_tutorial/include main.cpp",
     "file": "main.cpp"
   }
 ]

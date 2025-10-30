@@ -340,3 +340,46 @@ So when you insert a barrier, you’re not stopping everything — you’re sayi
 “Writes of resource X by stage A must be made visible before reads of resource X by stage B.”
 
 That’s it. Everything else can keep running.
+
+
+💎 GPU Gems 1 (2004) — Foundations of Real-Time Shading
+
+🔸 Theme: Moving from fixed-function to programmable pipelines
+🔸 Best for: Understanding why shaders exist and how GPU rendering logic evolved.
+
+| Chapter                                              | Topic                                             | Why It’s Still Useful                                          |
+| ---------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------- |
+| **Ch. 1 – Real-Time Procedural Shading**             | Basics of writing custom shaders                  | Great intro to shader logic; helps you “think like a GPU.”     |
+| **Ch. 7 – Per-Pixel Lighting**                       | Replacing per-vertex lighting with per-pixel      | Core concept in all modern rendering pipelines.                |
+| **Ch. 8 – Normal Mapping**                           | Using tangent-space normals to fake detail        | Still used in every game engine today.                         |
+| **Ch. 16 – Water Simulation and Rendering**          | Combining refraction, reflection, and wave motion | Classic example of integrating physics + shaders.              |
+| **Ch. 21 – Depth of Field: A Postprocessing Filter** | Simulating camera focus                           | Still relevant — great for understanding screen-space effects. |
+
+
+💎 GPU Gems 2 (2005) — Advanced Rendering & Effects
+
+🔸 Theme: Making real-time graphics look cinematic.
+🔸 Best for: Learning post-processing, lighting, and material realism.
+
+| Chapter                                                       | Topic                                       | Why It’s Still Useful                                                     |
+| ------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------- |
+| **Ch. 14 – Deferred Shading in S.T.A.L.K.E.R.**               | Describes early deferred rendering          | Exactly the foundation of how modern Vulkan PBR pipelines are structured. |
+| **Ch. 16 – HDR Rendering**                                    | High Dynamic Range rendering & tone mapping | Still 100% relevant for modern engines.                                   |
+| **Ch. 18 – Efficient Soft-Edged Shadows Using Pixel Shaders** | PCF and shadow filtering                    | Great practical shadow techniques.                                        |
+| **Ch. 38 – Skin Rendering**                                   | Subsurface scattering approximation         | Still used in stylized or semi-realistic characters.                      |
+| **Ch. 39 – Using the GPU for Physics Simulation**             | Early GPU compute                           | Pre-CUDA GPGPU ideas that inspire modern compute shader work.             |
+
+
+💎 GPU Gems 3 (2007) — Next-Gen and Compute Techniques
+
+🔸 Theme: Unified shaders, advanced lighting, and early GPGPU computing.
+🔸 Best for: Understanding modern rendering ideas — things that evolved into today’s standards (SSAO, deferred shading, global illumination, etc.).
+
+| Chapter                                                                 | Topic                         | Why It’s Still Useful                                             |
+| ----------------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------- |
+| **Ch. 10 – Real-Time Ambient Occlusion**                                | Early SSAO technique          | SSAO and variants are standard in every modern engine.            |
+| **Ch. 12 – Deferred Shading in Tabula Rasa**                            | Real-world deferred renderer  | Excellent architecture breakdown.                                 |
+| **Ch. 14 – Volumetric Light Scattering**                                | God rays / volumetric effects | Directly translatable to compute or screen-space implementations. |
+| **Ch. 30 – FFT-Based Ocean Simulation**                                 | Physically-based water waves  | Still used in modern AAA water simulations.                       |
+| **Ch. 34 – Real-Time Global Illumination Using Reflective Shadow Maps** | Early GI concept              | Seeds for real-time GI research today (RTXGI, Lumen, etc.)        |
+

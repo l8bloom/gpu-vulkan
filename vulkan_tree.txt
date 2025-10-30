@@ -314,3 +314,29 @@ Your 3D mesh surface is not volumetric; it’s a skin — a continuous 2D sheet 
 | **Annual plant**    | 🧮 **Short-lived script or microservice**     | Does its job, then terminates.                                                                                                  |
 | **Perennial plant** | 🏗️ **Long-running service or legacy system** | Keeps operating, updated season after season.                                                                                   |
 | **Weeds**           | 🐛 **Bugs or spam processes**                 | Unwanted, hard to kill, somehow always growing where you don’t want them. 😆                                                    |
+
+
+
+⚙️ 2. What’s really happening under the hood
+
+A GPU isn’t one big “thread.” It’s a collection of pipelines and units running work in parallel:
+
+Vertex shading
+
+Fragment shading
+
+Color attachment writes
+
+Compute dispatch
+
+Transfer/DMA copy
+
+etc.
+
+Each stage can be working on different resources at the same time.
+
+So when you insert a barrier, you’re not stopping everything — you’re saying:
+
+“Writes of resource X by stage A must be made visible before reads of resource X by stage B.”
+
+That’s it. Everything else can keep running.

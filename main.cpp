@@ -12,6 +12,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
@@ -27,20 +28,28 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/ext/vector_float2.hpp>
 #include <glm/fwd.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/hash.hpp>
 #include <glm/trigonometric.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
 
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tinyobjloader/tiny_obj_loader.h"
+
 constexpr uint32_t WINDOW_WIDTH = 2560;
 constexpr uint32_t WINDOW_HEIGHT = 1440;
+const std::string MODEL_PATH = "models/viking_room.obj";
+const std::string TEXTURE_PATH = "textures/viking_room.png";
 
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -91,6 +100,19 @@ struct Vertex {
         },
     };
   }
+  bool operator==(const Vertex &otherVertex) const {
+    return pos == otherVertex.pos && texCoord == otherVertex.texCoord &&
+           color == otherVertex.color;
+  }
+};
+
+template <> struct std::hash<Vertex> {
+  size_t operator()(const Vertex &vertex) const noexcept {
+    return ((hash<glm::vec3>()(vertex.pos) ^
+             (hash<glm::vec3>()(vertex.color) << 1)) >>
+            1) ^
+           (hash<glm::vec2>()(vertex.texCoord) << 1);
+  }
 };
 
 // const std::vector<Vertex> vertices = {
@@ -116,52 +138,52 @@ struct Vertex {
 //     },
 // };
 
-const std::vector<Vertex> vertices = {
-    {
-        {-1.0f, -1.0f, 0.0f},
-        {1.0f, 0.0f, 0.0f},
-        {2.0f, 0.0f},
-    },
-    {
-        {1.0f, -1.0f, 0.0f},
-        {0.0f, 1.0f, 0.0f},
-        {0.0f, 0.0f},
-    },
-    {
-        {1.0f, 1.0f, 0.0f},
-        {0.0f, 0.0f, 1.0f},
-        {0.0f, 2.0f},
-    },
-    {
-        {-1.0f, 1.0f, 0.0f},
-        {1.0f, 1.0f, 1.0f},
-        {2.0f, 2.0f},
-    },
-    {
-        {-1.0f, -1.0f, -0.5f},
-        {1.0f, 0.0f, 0.0f},
-        {2.0f, 0.0f},
-    },
-    {
-        {1.0f, -1.0f, -0.5f},
-        {0.0f, 1.0f, 0.0f},
-        {0.0f, 0.0f},
-    },
-    {
-        {1.0f, 1.0f, -0.5f},
-        {0.0f, 0.0f, 1.0f},
-        {0.0f, 2.0f},
-    },
-    {
-        {-1.0f, 1.0f, -0.5f},
-        {1.0f, 1.0f, 1.0f},
-        {2.0f, 2.0f},
-    },
-};
+// const std::vector<Vertex> vertices = {
+//     {
+//         {-1.0f, -1.0f, 0.0f},
+//         {1.0f, 0.0f, 0.0f},
+//         {2.0f, 0.0f},
+//     },
+//     {
+//         {1.0f, -1.0f, 0.0f},
+//         {0.0f, 1.0f, 0.0f},
+//         {0.0f, 0.0f},
+//     },
+//     {
+//         {1.0f, 1.0f, 0.0f},
+//         {0.0f, 0.0f, 1.0f},
+//         {0.0f, 2.0f},
+//     },
+//     {
+//         {-1.0f, 1.0f, 0.0f},
+//         {1.0f, 1.0f, 1.0f},
+//         {2.0f, 2.0f},
+//     },
+//     {
+//         {-1.0f, -1.0f, -0.5f},
+//         {1.0f, 0.0f, 0.0f},
+//         {2.0f, 0.0f},
+//     },
+//     {
+//         {1.0f, -1.0f, -0.5f},
+//         {0.0f, 1.0f, 0.0f},
+//         {0.0f, 0.0f},
+//     },
+//     {
+//         {1.0f, 1.0f, -0.5f},
+//         {0.0f, 0.0f, 1.0f},
+//         {0.0f, 2.0f},
+//     },
+//     {
+//         {-1.0f, 1.0f, -0.5f},
+//         {1.0f, 1.0f, 1.0f},
+//         {2.0f, 2.0f},
+//     },
+// };
 
-const std::vector<uint16_t> indices = {
-    0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4,
-};
+// const std::vector<uint16_t> indices = {
+//     0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4,
+// };
 
 struct UniformBufferObject {
   alignas(16) glm::mat4 model;
@@ -214,11 +236,16 @@ private:
   vk::raii::DescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
   vk::raii::PipelineLayout pipelineLayout = VK_NULL_HANDLE;
   vk::raii::Pipeline graphicsPipeline = VK_NULL_HANDLE;
+
   vk::raii::CommandPool commandPool = VK_NULL_HANDLE;
   std::vector<vk::raii::CommandBuffer> commandBuffers;
+
   std::vector<vk::raii::Semaphore> presentCompleteSemphores;
   std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
   std::vector<vk::raii::Fence> inFlightFences;
+
+  std::vector<Vertex> vertices;
+  std::vector<uint32_t> indices;
   vk::raii::Buffer vertexBuffer = VK_NULL_HANDLE;
   vk::raii::DeviceMemory vertexBufferMemory = VK_NULL_HANDLE;
   vk::raii::Buffer indexBuffer = VK_NULL_HANDLE;
@@ -226,12 +253,15 @@ private:
   std::vector<vk::raii::Buffer> uniformBuffers;
   std::vector<vk::raii::DeviceMemory> uniformBuffersMemory;
   std::vector<void *> uniformBuffersMapped;
+
   vk::raii::DescriptorPool descriptorPool = VK_NULL_HANDLE;
   std::vector<vk::raii::DescriptorSet> descriptorSets;
+
   vk::raii::Image textureImage = VK_NULL_HANDLE;
   vk::raii::DeviceMemory textureImageMemory = VK_NULL_HANDLE;
   vk::raii::ImageView textureImageView = VK_NULL_HANDLE;
   vk::raii::Sampler textureSampler = VK_NULL_HANDLE;
+
   vk::raii::Image depthImage = VK_NULL_HANDLE;
   vk::raii::DeviceMemory depthImageMemory = VK_NULL_HANDLE;
   vk::raii::ImageView depthImageView = VK_NULL_HANDLE;
@@ -860,7 +890,7 @@ private:
                                               graphicsPipeline);
     commandBuffers[currentFrame].bindVertexBuffers(0, *vertexBuffer, {0});
     commandBuffers[currentFrame].bindIndexBuffer(*indexBuffer, 0,
-                                                 vk::IndexType::eUint16);
+                                                 vk::IndexType::eUint32);
     commandBuffers[currentFrame].bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics, pipelineLayout, 0,
         *descriptorSets[currentFrame], nullptr);
@@ -1242,7 +1272,7 @@ private:
 
   void createTextureImage() {
     int texWidth, texHeight, texChannels;
-    stbi_uc *pixels = stbi_load("textures/ja.jpeg", &texWidth, &texHeight,
+    stbi_uc *pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight,
                                 &texChannels, STBI_rgb_alpha);
     vk::DeviceSize imageSize = texWidth * texHeight * 4;
     std::cout << "Texture Image width: " << texWidth
@@ -1503,6 +1533,45 @@ private:
     // throw std::runtime_error("bla");
   }
 
+  void loadModel() {
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+    std::string warn, err;
+    std::unordered_map<Vertex, uint32_t> uniqueVertices{};
+
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err,
+                          MODEL_PATH.c_str())) {
+      throw std::runtime_error(warn + err);
+    }
+
+    for (const auto &shape : shapes) {
+      for (const auto &index : shape.mesh.indices) {
+        Vertex vertex{};
+
+        vertex.pos = {
+            attrib.vertices[3 * index.vertex_index + 0],
+            attrib.vertices[3 * index.vertex_index + 1],
+            attrib.vertices[3 * index.vertex_index + 2],
+        };
+
+        vertex.texCoord = {
+            attrib.texcoords[2 * index.texcoord_index + 0],
+            1.0f - attrib.texcoords[2 * index.texcoord_index + 1],
+        };
+
+        vertex.color = {1.0f, 1.0f, 1.0f};
+
+        if (!uniqueVertices.contains(vertex)) {
+          uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
+          vertices.push_back(vertex);
+        }
+
+        indices.push_back(uniqueVertices[vertex]);
+      }
+    }
+  }
+
   void initWindow() {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -1528,6 +1597,7 @@ private:
     createTextureImage();
     createTextureImageView();
     createTextureSampler();
+    loadModel();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();

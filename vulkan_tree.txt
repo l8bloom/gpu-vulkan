@@ -383,3 +383,20 @@ That’s it. Everything else can keep running.
 | **Ch. 30 – FFT-Based Ocean Simulation**                                 | Physically-based water waves  | Still used in modern AAA water simulations.                       |
 | **Ch. 34 – Real-Time Global Illumination Using Reflective Shadow Maps** | Early GI concept              | Seeds for real-time GI research today (RTXGI, Lumen, etc.)        |
 
+
+
+###
+
+
+TL;DR mental model
+
+Compute shaders = “make or transform data on the GPU”
+Graphics shaders = “turn data into an image”
+
+Sometimes, that data happens to be pixels.
+Sometimes, it’s something way more abstract (like physics, culling, or procedural generation).
+But both are just programmable parts of the same GPU — they can feed each other freely.
+
+        UBO  	  	       	 Compute shader
+Analogy “Settings for the frame” “A mini-program that generates data”
+

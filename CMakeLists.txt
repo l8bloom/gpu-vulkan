@@ -12,6 +12,12 @@ target_link_libraries(vulkos PRIVATE Vulkan::Vulkan glfw)
 
 target_include_directories(vulkos PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+add_executable(particles particles.cpp)
+#add_executable(particles their_particles.cpp)
+target_link_libraries(particles PRIVATE Vulkan::Vulkan glfw)
+target_include_directories(particles PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+
 function (add_slang_shader_target TARGET)
   cmake_parse_arguments ("SHADER" "" "" "SOURCES" ${ARGN})
   set(SHADERS_DIR ${CMAKE_CURRENT_LIST_DIR}/shaders)

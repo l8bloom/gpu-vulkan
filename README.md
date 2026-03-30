@@ -1,4 +1,4 @@
-![Demo of Shaders](assets/basic_compute_shaders.gif)
+![Demo of Shaders](vulkan_learning/assets/basic_compute_shaders.gif)
 
 A deep-dive project into the Vulkan API, focusing on explicit GPU resource management, synchronization, and compute-graphics pipelines. This repository serves as a technical portfolio for my journey into low-level graphics programming.
 

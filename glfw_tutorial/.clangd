@@ -1,0 +1,6 @@
+CompileFlags:
+  Add: [
+     -I/home/dom-ak45/Downloads/glfw/include,
+     -I/home/dom-ak45/vulkan/1.4.321.1/x86_64/include,
+     -I/usr/lib/gcc/x86_64-linux-gnu/14/include,
+  ]

@@ -18,6 +18,7 @@ lib64/
 *.egg-info/
 *.egg
 *.out
+*.o
 
 # Ruff
 .ruff_cache/
@@ -33,3 +34,7 @@ venv/
 .cache/
 *.spv
 *.slang-ast
+
+include/
+
+vulkan_tree.txt

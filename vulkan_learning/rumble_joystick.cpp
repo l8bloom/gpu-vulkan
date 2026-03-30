@@ -9,7 +9,7 @@
 
 int main() {
   const char *device =
-      "/dev/input/event17"; // replace with your controller’s event device
+      "/dev/input/event17"; // kind of hardcoded controller’s event device
   int fd = open(device, O_RDWR);
   if (fd < 0) {
     perror("open");
@@ -17,7 +17,7 @@ int main() {
   }
 
   // Query force feedback capabilities
-  unsigned long features[20]; // enough for EV_MAX
+  unsigned long features[20];
   memset(features, 0, sizeof(features));
   if (ioctl(fd, EVIOCGBIT(EV_FF, sizeof(features)), features) < 0) {
     perror("ioctl");
